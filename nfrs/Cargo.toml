@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "nfrs_server",
+    "nfrs_shared",
+    "nfrs_client",
+]

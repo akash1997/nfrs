@@ -1,0 +1,22 @@
+[package]
+name = "nfrs_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nfrs_shared = { path = "../nfrs_shared" }
+bevy = { version = "0.14", default-features = false, features = [
+    "bevy_winit",
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_sprite",
+    "bevy_ui",
+    "bevy_text",
+    "multi_threaded",
+    "x11",
+    "bevy_gizmos",
+] }
+bevy_replicon = "0.27"
+bevy_replicon_renet = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
