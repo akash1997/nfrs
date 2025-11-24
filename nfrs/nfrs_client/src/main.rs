@@ -79,7 +79,7 @@ fn setup_client(mut commands: Commands, args: Res<Args>) {
 
     let client_id = rand::random::<u64>();
     // Use WSL IP to avoid localhost UDP forwarding issues
-    let server_addr = SocketAddr::new(Ipv4Addr::new(172, 20, 137, 119).into(), 5001);
+    let server_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 5001);
     let client_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0);
 
     info!(
