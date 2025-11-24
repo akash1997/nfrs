@@ -1,17 +1,17 @@
 use bevy::prelude::*;
-use bevy::sprite::MaterialMesh2dBundle;
-use bevy_replicon::prelude::*;
-use bevy_replicon_renet::{
-    renet::{
-        transport::{ClientAuthentication, NetcodeClientTransport},
-        ConnectionConfig, RenetClient,
-    },
-};
-use nfrs_shared::{CarInput, Player, SharedPlugin};
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
-use std::time::SystemTime;
-
 use clap::Parser;
+use lightyear::netcode::Key;
+use lightyear::prelude::client::*;
+use lightyear::prelude::*;
+use nfrs_shared::{CarInput, InputChannel, Player, ProtocolPlugin};
+use std::net::{Ipv4Addr, SocketAddr};
+use tracing::info;
+
+#[cfg(not(target_arch = "wasm32"))]
+use lightyear::prelude::UdpIo;
+
+#[cfg(target_arch = "wasm32")]
+use lightyear::prelude::client::WebTransportClientIo;
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
@@ -22,68 +22,145 @@ struct Args {
 }
 
 fn main() {
+    // Set up panic hook and logging for WASM
+    #[cfg(target_arch = "wasm32")]
+    {
+        console_error_panic_hook::set_once();
+        tracing_wasm::set_as_global_default_with_config(
+            tracing_wasm::WASMLayerConfigBuilder::new()
+                .set_max_level(tracing::Level::INFO)
+                .build(),
+        );
+    }
+
     let args = Args::parse();
-    
+
     App::new()
-        .insert_resource(args) // Store args as resource
-        .add_plugins((
-            DefaultPlugins,
-            SharedPlugin,
-            bevy_replicon_renet::client::RepliconRenetClientPlugin,
-        ))
+        .insert_resource(args)
+        .add_plugins(DefaultPlugins)
+        .add_plugins(ClientPlugins::default())
+        .add_plugins(ProtocolPlugin)
         .add_systems(Startup, setup_client)
-        .add_systems(Update, (input_system, spawn_cars))
+        .add_systems(Update, spawn_cars)
+        .add_systems(Update, input_system)
+        .add_systems(Update, (handle_connect, handle_disconnect))
+        .add_systems(Update, debug_entities)
+        .add_observer(debug_player_spawn)
         .run();
 }
 
-fn setup_client(mut commands: Commands, _network_channels: Res<RepliconChannels>, args: Res<Args>) {
-    commands.spawn(Camera2dBundle::default());
+fn debug_player_spawn(trigger: Trigger<OnAdd, Player>, query: Query<&Player>) {
+    if let Ok(player) = query.get(trigger.target()) {
+        info!("Client: Player entity spawned! ID: {}", player.client_id);
+    }
+}
 
-    let client = RenetClient::new(ConnectionConfig::default());
+fn handle_connect(query: Query<Entity, Added<Connected>>) {
+    for _ in query.iter() {
+        info!("Client connected to server!");
+    }
+}
 
-    let current_time = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap();
-    let client_id = current_time.as_millis() as u64;
-    let server_addr = SocketAddr::new(args.ip.parse().expect("Invalid IP address"), 5000);
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("Could not bind to socket");
-    
-    let authentication = ClientAuthentication::Unsecure {
-        client_id,
-        protocol_id: 0,
+fn handle_disconnect(mut removals: RemovedComponents<Connected>) {
+    for _ in removals.read() {
+        info!("Client disconnected from server!");
+    }
+}
+
+fn setup_client(mut commands: Commands, args: Res<Args>) {
+    // Spawn camera
+    commands.spawn((
+        Camera2d,
+        Projection::Orthographic(OrthographicProjection {
+            scale: 0.05,
+            ..OrthographicProjection::default_2d()
+        }),
+    ));
+
+    let client_id = rand::random::<u64>();
+    // Use WSL IP to avoid localhost UDP forwarding issues
+    let server_addr = SocketAddr::new(Ipv4Addr::new(172, 20, 137, 119).into(), 5001);
+    let client_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0);
+
+    info!(
+        "Connecting to server at {} with client id {}",
+        server_addr, client_id
+    );
+
+    let auth = Authentication::Manual {
         server_addr,
-        user_data: None,
+        client_id,
+        private_key: Key::default(),
+        protocol_id: 0,
     };
 
-    let transport = NetcodeClientTransport::new(current_time, authentication, socket)
-        .expect("Could not create transport");
+    #[cfg(target_arch = "wasm32")]
+    let client = commands
+        .spawn((
+            Client::default(),
+            LocalAddr(client_addr),
+            PeerAddr(server_addr),
+            Link::new(None),
+            ReplicationReceiver::default(),
+            NetcodeClient::new(auth, NetcodeConfig::default()).unwrap(),
+            WebTransportClientIo {
+                certificate_digest: String::from(
+                    "563e1c873b620196bce6d4baff29210493290918e8e42ae1d8208b07e6121057",
+                ),
+            }, // WASM uses WebTransport
+        ))
+        .id();
 
-    commands.insert_resource(client);
-    commands.insert_resource(transport);
+    #[cfg(not(target_arch = "wasm32"))]
+    let client = commands
+        .spawn((
+            Client::default(),
+            LocalAddr(client_addr),
+            PeerAddr(server_addr),
+            Link::new(None),
+            ReplicationReceiver::default(),
+            NetcodeClient::new(auth, NetcodeConfig::default()).unwrap(),
+            UdpIo::default(), // Native uses UDP
+        ))
+        .id();
+
+    // Add message sender for inputs
+    commands
+        .entity(client)
+        .insert(MessageSender::<CarInput>::default());
+
+    // Start the link first
+    commands.entity(client).trigger(LinkStart);
+    // Then start the connection
+    commands.entity(client).trigger(Connect);
 }
 
 fn input_system(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut car_input_events: EventWriter<CarInput>,
+    mut input_sender: Query<&mut MessageSender<CarInput>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
 ) {
-    let mut throttle = 0.0;
-    let mut steering = 0.0;
+    if let Ok(mut sender) = input_sender.single_mut() {
+        let mut input = CarInput::default();
 
-    if keys.pressed(KeyCode::ArrowUp) {
-        throttle += 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowDown) {
-        throttle -= 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowLeft) {
-        steering += 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowRight) {
-        steering -= 1.0;
-    }
+        if keyboard.pressed(KeyCode::KeyW) {
+            input.forward = true;
+        }
+        if keyboard.pressed(KeyCode::KeyS) {
+            input.backward = true;
+        }
+        if keyboard.pressed(KeyCode::KeyA) {
+            input.left = true;
+        }
+        if keyboard.pressed(KeyCode::KeyD) {
+            input.right = true;
+        }
 
-    if throttle != 0.0 || steering != 0.0 {
-        car_input_events.send(CarInput { throttle, steering });
+        // Only send if any key is pressed
+        if input.forward || input.backward || input.left || input.right {
+            // println!("Sending input: {:?}", input);
+            info!("Sending input: {:?}", input);
+            sender.send::<InputChannel>(input);
+        }
     }
 }
 
@@ -93,15 +170,24 @@ fn spawn_cars(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    for (entity, player) in query.iter() {
-        info!("Spawning car for player {}", player.client_id);
-        commands.entity(entity).insert(MaterialMesh2dBundle {
-            mesh: meshes.add(Rectangle::new(20.0, 40.0)).into(),
-            material: materials.add(ColorMaterial::from(Color::srgb(1.0, 0.0, 0.0))),
-            transform: Transform::from_xyz(0.0, 0.0, 0.0),
-            ..Default::default()
-        });
+    for (entity, _player) in query.iter() {
+        info!("Spawning visual representation for player car");
+        commands.entity(entity).insert((
+            Mesh2d(meshes.add(Rectangle::new(2.0, 4.0))),
+            MeshMaterial2d(materials.add(Color::srgb(0.8, 0.2, 0.3))),
+            Transform::default(),
+        ));
     }
 }
 
-
+fn debug_entities(query: Query<Entity>, player_query: Query<&Player>, time: Res<Time>) {
+    // Log every 5 seconds using elapsed_secs as integer
+    let elapsed = time.elapsed_secs() as u32;
+    if elapsed % 5 == 0 && time.delta_secs() < 0.1 {
+        info!(
+            "Total entities: {}, Player entities: {}",
+            query.iter().count(),
+            player_query.iter().count()
+        );
+    }
+}

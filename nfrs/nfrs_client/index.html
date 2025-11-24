@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFRS Racing Client</title>
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #00d4ff, #0099ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        canvas {
+            border: 3px solid #0099ff;
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 153, 255, 0.3);
+            background: #000;
+        }
+
+        #controls {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        #controls h2 {
+            margin-top: 0;
+            color: #00d4ff;
+        }
+
+        .key {
+            display: inline-block;
+            padding: 8px 12px;
+            margin: 4px;
+            background: rgba(0, 153, 255, 0.2);
+            border: 2px solid #0099ff;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <h1>🏎️ NFRS Racing</h1>
+        <canvas id="bevy"></canvas>
+        <div id="controls">
+            <h2>Controls</h2>
+            <div>
+                <span class="key">W</span> Forward
+                <span class="key">S</span> Backward
+                <span class="key">A</span> Left
+                <span class="key">D</span> Right
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

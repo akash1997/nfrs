@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 nfrs_shared = { path = "../nfrs_shared" }
-bevy = { version = "0.14", default-features = false, features = [
+bevy = { version = "0.16", default-features = false, features = [
     "bevy_winit",
     "bevy_render",
     "bevy_core_pipeline",
@@ -15,8 +15,16 @@ bevy = { version = "0.14", default-features = false, features = [
     "multi_threaded",
     "x11",
     "bevy_gizmos",
+    "webgl2",
 ] }
-bevy_replicon = "0.27"
-bevy_replicon_renet = "0.4"
+lightyear = { version = "0.24", features = ["client", "netcode", "replication", "udp", "webtransport", "input_native"] }
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.5.53", features = ["derive"] }
+tracing = "0.1"
+rand = "0.8"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.2", features = ["js"] }
+tracing-wasm = "0.2"

@@ -37,3 +37,10 @@ Since the server is running in a Linux environment (WSL/VM) and the client needs
 ## Troubleshooting
 - **Firewall**: Ensure Windows Firewall allows the connection on port 5000 (UDP).
 - **WSL Networking**: If you can't connect, try port forwarding or ensure you are using the correct IP. `localhost` might not work if the server is bound to `0.0.0.0` inside WSL but Windows doesn't forward it automatically. Using the specific WSL IP is safer.
+- **Incremental Compilation Error**: If you see `could not create session directory lock file`, it's likely due to file locking issues (common if accessing WSL files from Windows).
+  - **Fix**: Disable incremental compilation by running:
+    ```powershell
+    $env:CARGO_INCREMENTAL=0
+    cargo run -p nfrs_client -- --ip <SERVER_IP>
+    ```
+  - **Alternative**: Move the project folder to a local Windows drive (e.g., `C:\Projects\nfrs`) instead of running it from a network share or WSL mount.
