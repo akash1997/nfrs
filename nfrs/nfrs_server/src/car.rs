@@ -59,6 +59,11 @@ fn handle_new_client(trigger: Trigger<OnAdd, LinkOf>, mut commands: Commands) {
         RigidBody::Dynamic,
         Collider::cuboid(1.0, 2.0),
         Velocity::default(),
+        GravityScale(0.0),
+        Damping {
+            linear_damping: 2.0,
+            angular_damping: 2.0,
+        },
         Replicate::to_clients(NetworkTarget::All),
         ReplicationGroup::default(),
     ));
@@ -109,6 +114,11 @@ fn apply_car_input(
 
                     velocity.linvel = linear_vel;
                     velocity.angvel = angular_vel;
+
+                    info!(
+                        "Applied input to car {}: linvel={:?}, angvel={}, rotation={:?}",
+                        client_id, linear_vel, angular_vel, transform.rotation
+                    );
                 }
             }
         }

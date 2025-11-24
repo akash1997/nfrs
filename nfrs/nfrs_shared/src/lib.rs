@@ -18,6 +18,7 @@ impl Plugin for ProtocolPlugin {
         app.register_component::<Player>();
         app.register_component::<Car>();
         app.register_component::<PlayerPosition>();
+        app.register_component::<Transform>();
 
         // Register the message protocol
         app.add_message::<CarInput>();
@@ -34,7 +35,8 @@ impl Plugin for ProtocolPlugin {
         app.add_channel::<InputChannel>(ChannelSettings {
             mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
             ..default()
-        });
+        })
+        .add_direction(NetworkDirection::ClientToServer);
     }
 }
 
