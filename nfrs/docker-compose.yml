@@ -1,0 +1,21 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: nfrs_server/Dockerfile
+    ports:
+      - "5000:5000/udp"
+      - "5001:5001/udp"
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: nfrs_client/Dockerfile
+      args:
+        # Default to localhost for local testing. 
+        # For remote deployment, this should be the public IP of the server.
+        - NFRS_SERVER_ADDR=${NFRS_SERVER_ADDR:-127.0.0.1:5001}
+    ports:
+      - "8080:443"
+    restart: unless-stopped

@@ -78,8 +78,11 @@ fn setup_client(mut commands: Commands, args: Res<Args>) {
     ));
 
     let client_id = rand::random::<u64>();
-    // Use WSL IP to avoid localhost UDP forwarding issues
-    let server_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 5001);
+    // Use build-time configured address or fallback to WSL IP
+    let server_addr_str = option_env!("NFRS_SERVER_ADDR").unwrap_or("127.0.0.1:5001");
+    let server_addr: SocketAddr = server_addr_str
+        .parse()
+        .expect("Invalid NFRS_SERVER_ADDR format. Expected IP:PORT");
     let client_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0);
 
     info!(
