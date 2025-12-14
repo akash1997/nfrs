@@ -35,8 +35,6 @@ fn main() {
 }
 
 fn start_server(mut commands: Commands) {
-    let server_addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 5000);
-
     // Load certificate
     let cert_path = std::path::Path::new("cert.pem");
     let key_path = std::path::Path::new("key.pem");
@@ -73,7 +71,3 @@ fn start_server(mut commands: Commands) {
     commands.entity(wt_server).trigger(LinkStart);
     commands.entity(wt_server).trigger(Start);
 }
-
-// fn configure_physics(mut rapier_config: ResMut<RapierConfiguration>) {
-//     rapier_config.gravity = Vec2::ZERO;
-// }

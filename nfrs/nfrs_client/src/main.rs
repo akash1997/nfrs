@@ -13,6 +13,12 @@ use lightyear::prelude::UdpIo;
 #[cfg(target_arch = "wasm32")]
 use lightyear::prelude::client::WebTransportClientIo;
 
+#[cfg(target_arch = "wasm32")]
+fn log_digest() {
+    let digest = env!("NFRS_CERT_DIGEST");
+    info!("Client using certificate digest: {}", digest);
+}
+
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -31,6 +37,7 @@ fn main() {
                 .set_max_level(tracing::Level::INFO)
                 .build(),
         );
+        log_digest();
     }
 
     let args = Args::parse();
@@ -67,7 +74,7 @@ fn handle_disconnect(mut removals: RemovedComponents<Connected>) {
     }
 }
 
-fn setup_client(mut commands: Commands, args: Res<Args>) {
+fn setup_client(mut commands: Commands) {
     // Spawn camera
     commands.spawn((
         Camera2d,
@@ -107,9 +114,7 @@ fn setup_client(mut commands: Commands, args: Res<Args>) {
             ReplicationReceiver::default(),
             NetcodeClient::new(auth, NetcodeConfig::default()).unwrap(),
             WebTransportClientIo {
-                certificate_digest: String::from(
-                    "563e1c873b620196bce6d4baff29210493290918e8e42ae1d8208b07e6121057",
-                ),
+                certificate_digest: String::from(env!("NFRS_CERT_DIGEST")),
             }, // WASM uses WebTransport
         ))
         .id();
@@ -178,7 +183,6 @@ fn spawn_cars(
         commands.entity(entity).insert((
             Mesh2d(meshes.add(Rectangle::new(2.0, 4.0))),
             MeshMaterial2d(materials.add(Color::srgb(0.8, 0.2, 0.3))),
-            Transform::default(),
         ));
     }
 }

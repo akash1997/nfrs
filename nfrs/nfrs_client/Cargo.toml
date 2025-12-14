@@ -28,3 +28,8 @@ wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 getrandom = { version = "0.2", features = ["js"] }
 tracing-wasm = "0.2"
+
+[build-dependencies]
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.21"

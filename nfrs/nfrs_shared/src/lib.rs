@@ -22,14 +22,6 @@ impl Plugin for ProtocolPlugin {
 
         // Register the message protocol
         app.add_message::<CarInput>();
-        println!(
-            "Is CarInput registered? {}",
-            app.is_message_registered::<CarInput>()
-        );
-        info!(
-            "Is CarInput registered? {}",
-            app.is_message_registered::<CarInput>()
-        );
 
         // Register the input channel
         app.add_channel::<InputChannel>(ChannelSettings {

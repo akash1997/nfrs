@@ -51,7 +51,10 @@ fn sync_initial_state(
         if sync_marker.frames_to_wait > 0 {
             // Wait a few frames to ensure Replicate components are updated
             sync_marker.frames_to_wait -= 1;
-            info!("Waiting for replication setup, frames left: {}", sync_marker.frames_to_wait);
+            info!(
+                "Waiting for replication setup, frames left: {}",
+                sync_marker.frames_to_wait
+            );
             continue;
         }
 
@@ -115,44 +118,54 @@ fn handle_new_client(
     let replicate = Replicate::manual(all_clients.clone());
 
     // Spawn car for this client - replicate to all connected clients
-    let car_entity = commands.spawn((
-        Car {
-            max_speed: 20.0,
-            acceleration: 10.0,
-            steering_speed: 2.0,
-        },
-        Player { client_id },
-        PlayerPosition::default(),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        GlobalTransform::default(),
-        RigidBody::Dynamic,
-        Collider::cuboid(1.0, 2.0),
-        Velocity::default(),
-        GravityScale(0.0),
-        Damping {
-            linear_damping: 2.0,
-            angular_damping: 2.0,
-        },
-        replicate,
-        ReplicationGroup::default(),
-    )).id();
+    let car_entity = commands
+        .spawn((
+            Car {
+                max_speed: 20.0,
+                acceleration: 10.0,
+                steering_speed: 2.0,
+            },
+            Player { client_id },
+            PlayerPosition::default(),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            GlobalTransform::default(),
+            RigidBody::Dynamic,
+            Collider::cuboid(1.0, 2.0),
+            Velocity::default(),
+            GravityScale(0.0),
+            Damping {
+                linear_damping: 2.0,
+                angular_damping: 2.0,
+            },
+            replicate,
+            ReplicationGroup::default(),
+        ))
+        .id();
 
     // Track the mapping
     car_map.client_to_car.insert(client_entity, car_entity);
-    info!("Spawned car {:?} for client {:?}", car_entity, client_entity);
+    info!(
+        "Spawned car {:?} for client {:?}",
+        car_entity, client_entity
+    );
 
     // Update all existing cars to also replicate to this new client
     for (existing_car, _) in existing_cars.iter_mut() {
         // Replace the Replicate component with a new one that includes all clients
-        commands.entity(existing_car).insert(Replicate::manual(all_clients.clone()));
-        info!("Updated car {:?} to replicate to new client {:?}", existing_car, client_entity);
+        commands
+            .entity(existing_car)
+            .insert(Replicate::manual(all_clients.clone()));
+        info!(
+            "Updated car {:?} to replicate to new client {:?}",
+            existing_car, client_entity
+        );
     }
 
     // Mark this client as needing initial state sync from all existing cars
     // Wait 3 frames to ensure Replicate components are properly updated and active
-    commands.entity(client_entity).insert(NeedsInitialSync {
-        frames_to_wait: 3,
-    });
+    commands
+        .entity(client_entity)
+        .insert(NeedsInitialSync { frames_to_wait: 3 });
 }
 
 /// Handle client disconnections and cleanup their car
@@ -170,7 +183,10 @@ fn handle_client_disconnect(
     let despawned_car = car_map.client_to_car.remove(&client_entity);
 
     if let Some(car_entity) = despawned_car {
-        info!("Despawning car {:?} for disconnected client {:?}", car_entity, client_entity);
+        info!(
+            "Despawning car {:?} for disconnected client {:?}",
+            car_entity, client_entity
+        );
         commands.entity(car_entity).despawn();
     } else {
         warn!("No car found for disconnecting client {:?}", client_entity);
@@ -182,7 +198,10 @@ fn handle_client_disconnect(
         .filter(|&e| e != client_entity)
         .collect();
 
-    info!("Updating replication for remaining {} clients", remaining_clients.len());
+    info!(
+        "Updating replication for remaining {} clients",
+        remaining_clients.len()
+    );
 
     // Update all remaining cars to replicate only to remaining clients
     // Skip the car we just despawned (since despawn is deferred)
@@ -190,7 +209,9 @@ fn handle_client_disconnect(
         if Some(car) == despawned_car {
             continue; // Skip the car we just despawned
         }
-        commands.entity(car).insert(Replicate::manual(remaining_clients.clone()));
+        commands
+            .entity(car)
+            .insert(Replicate::manual(remaining_clients.clone()));
     }
 }
 
