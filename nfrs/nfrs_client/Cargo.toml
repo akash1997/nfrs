@@ -16,6 +16,8 @@ bevy = { version = "0.16", default-features = false, features = [
     "x11",
     "bevy_gizmos",
     "webgl2",
+    "bevy_state",
+    "png",
 ] }
 lightyear = { version = "0.24", features = ["client", "netcode", "replication", "udp", "webtransport", "input_native"] }
 serde = { version = "1.0", features = ["derive"] }

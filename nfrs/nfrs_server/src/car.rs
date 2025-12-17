@@ -24,11 +24,49 @@ pub struct CarPlugin;
 impl Plugin for CarPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ClientCarMap>();
+        app.add_systems(Startup, spawn_boundaries);
         app.add_systems(FixedUpdate, apply_car_input);
         app.add_observer(handle_new_client);
         app.add_observer(handle_client_disconnect);
-        app.add_systems(Update, (debug_cars, sync_initial_state));
+        // Add receiver for JoinRequest
+        app.add_systems(
+            Update,
+            (debug_cars, sync_initial_state, handle_join_request),
+        );
     }
+}
+
+fn spawn_boundaries(mut commands: Commands) {
+    // Map size: +/- 32.0 X, +/- 18.0 Y
+    let hx = 34.0; // Horizontal half-extent (top/bottom walls)
+    let hy = 19.0; // Vertical half-extent (left/right walls)
+    let thickness = 1.0;
+
+    // Top Wall
+    commands.spawn((
+        Transform::from_xyz(0.0, hy, 0.0),
+        Collider::cuboid(hx, thickness),
+    ));
+
+    // Bottom Wall
+    commands.spawn((
+        Transform::from_xyz(0.0, -hy, 0.0),
+        Collider::cuboid(hx, thickness),
+    ));
+
+    // Left Wall
+    commands.spawn((
+        Transform::from_xyz(-33.0, 0.0, 0.0),
+        Collider::cuboid(thickness, hy),
+    ));
+
+    // Right Wall
+    commands.spawn((
+        Transform::from_xyz(33.0, 0.0, 0.0),
+        Collider::cuboid(thickness, hy),
+    ));
+
+    info!("Spawned map boundaries");
 }
 
 fn debug_cars(query: Query<Entity, (With<Car>, With<Replicate>)>, time: Res<Time>) {
@@ -80,7 +118,6 @@ fn sync_initial_state(
 fn handle_new_client(
     trigger: Trigger<OnAdd, LinkOf>,
     mut commands: Commands,
-    mut car_map: ResMut<ClientCarMap>,
     // Query all existing client connections
     client_connections: Query<Entity, With<ReplicationSender>>,
     // Query all existing cars to update their replication
@@ -108,46 +145,14 @@ fn handle_new_client(
         .entity(client_entity)
         .insert(MessageReceiver::<CarInput>::default());
 
+    // Add JoinRequest receiver
+    commands
+        .entity(client_entity)
+        .insert(MessageReceiver::<nfrs_shared::JoinRequest>::default());
+
     // Get all client entities (existing + new one) for replication
     let mut all_clients: Vec<Entity> = client_connections.iter().collect();
     all_clients.push(client_entity);
-
-    info!("Total clients for replication: {}", all_clients.len());
-
-    // Create a Replicate component using manual mode with specific senders
-    let replicate = Replicate::manual(all_clients.clone());
-
-    // Spawn car for this client - replicate to all connected clients
-    let car_entity = commands
-        .spawn((
-            Car {
-                max_speed: 20.0,
-                acceleration: 10.0,
-                steering_speed: 2.0,
-            },
-            Player { client_id },
-            PlayerPosition::default(),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-            GlobalTransform::default(),
-            RigidBody::Dynamic,
-            Collider::cuboid(1.0, 2.0),
-            Velocity::default(),
-            GravityScale(0.0),
-            Damping {
-                linear_damping: 2.0,
-                angular_damping: 2.0,
-            },
-            replicate,
-            ReplicationGroup::default(),
-        ))
-        .id();
-
-    // Track the mapping
-    car_map.client_to_car.insert(client_entity, car_entity);
-    info!(
-        "Spawned car {:?} for client {:?}",
-        car_entity, client_entity
-    );
 
     // Update all existing cars to also replicate to this new client
     for (existing_car, _) in existing_cars.iter_mut() {
@@ -166,6 +171,109 @@ fn handle_new_client(
     commands
         .entity(client_entity)
         .insert(NeedsInitialSync { frames_to_wait: 3 });
+
+    // Note: We do NOT spawn a car here anymore. We wait for JoinRequest.
+    info!("Client initialized, waiting for JoinRequest...");
+}
+
+fn handle_join_request(
+    mut commands: Commands,
+    mut message_receivers: Query<(Entity, &mut MessageReceiver<nfrs_shared::JoinRequest>)>,
+    mut car_map: ResMut<ClientCarMap>,
+    client_connections: Query<Entity, With<ReplicationSender>>,
+    mut existing_cars: Query<(Entity, &mut Replicate), With<Car>>,
+) {
+    for (client_entity, mut receiver) in message_receivers.iter_mut() {
+        if let Some(request) = receiver.receive().next() {
+            let client_id = client_entity.index() as u64;
+            info!(
+                "Received JoinRequest from client {}: {:?}",
+                client_id, request
+            );
+
+            // Check if client already has a car
+            if car_map.client_to_car.contains_key(&client_entity) {
+                warn!(
+                    "Client {} already has a car, ignoring JoinRequest",
+                    client_id
+                );
+                continue;
+            }
+
+            // Generate unique color based on client_id to be deterministic/simple for now
+            // or modify to use Golden Ratio if needed.
+            // Simple HSL generation:
+            let hue = (client_id as f32 * 137.508) % 360.0; // Golden angle approximation
+            let color = Color::hsl(hue, 0.8, 0.5);
+            let color_rgba = color.to_srgba();
+            let color_array = [color_rgba.red, color_rgba.green, color_rgba.blue];
+
+            // Get all client entities for replication
+            let all_clients: Vec<Entity> = client_connections.iter().collect();
+
+            // Create Replicate component
+            let replicate = Replicate::manual(all_clients.clone());
+
+            // Spawn car
+            let car_entity = commands
+                .spawn((
+                    Car {
+                        max_speed: 20.0,
+                        acceleration: 10.0,
+                        steering_speed: 2.0,
+                    },
+                    Player {
+                        client_id,
+                        username: request.username.clone(),
+                        color: color_array,
+                    },
+                    PlayerPosition::default(),
+                    Transform::from_xyz(0.0, 0.0, 0.0),
+                    GlobalTransform::default(),
+                    RigidBody::Dynamic,
+                    Collider::cuboid(1.0, 2.0),
+                    Velocity::default(),
+                    GravityScale(0.0),
+                    Damping {
+                        linear_damping: 2.0,
+                        angular_damping: 2.0,
+                    },
+                    replicate,
+                    ReplicationGroup::default(),
+                ))
+                .id();
+
+            // Update map
+            car_map.client_to_car.insert(client_entity, car_entity);
+            info!(
+                "Spawned car {:?} for user '{}' (client {:?})",
+                car_entity, request.username, client_entity
+            );
+
+            // Update existing cars to replicate to this (possibly new) client
+            // Although handle_new_client handled the initial sync setup, ensuring manual replication list is current is good.
+            // Actually, handle_new_client doesn't update existing cars' replication list anymore because we needed the list of clients.
+            // We should ensure that when a NEW client joins, existing cars start replicating to it?
+            // Wait, existing cars are replicated manually. We need to update their Replicate target list.
+
+            // Re-evaluating logic:
+            // handle_new_client adds the client to the "world".
+            // existing cars need to know about this new client to replicate to it.
+            // BUT, handle_new_client didn't have access to "existing cars" to update them in the previous logic?
+            // Ah, looking at previous code: handle_new_client DID update existing_cars.
+            // I removed that block. I should put it back in handle_new_client OR handle it here?
+            // Ideally, cars should start replicating to a client as soon as it connects, even if that client hasn't joined yet?
+            // Yes, so they can see other cars while in menu (if we wanted).
+            // But currently cars are only spawned when joined.
+            // Let's stick to: Update existing cars to replicate to ALL connected clients.
+
+            for (existing_car, _) in existing_cars.iter_mut() {
+                commands
+                    .entity(existing_car)
+                    .insert(Replicate::manual(all_clients.clone()));
+            }
+        }
+    }
 }
 
 /// Handle client disconnections and cleanup their car

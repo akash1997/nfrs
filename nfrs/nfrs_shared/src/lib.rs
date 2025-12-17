@@ -22,6 +22,7 @@ impl Plugin for ProtocolPlugin {
 
         // Register the message protocol
         app.add_message::<CarInput>();
+        app.add_message::<JoinRequest>();
 
         // Register the input channel
         app.add_channel::<InputChannel>(ChannelSettings {
@@ -35,6 +36,9 @@ impl Plugin for ProtocolPlugin {
 #[derive(Component, Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct Player {
     pub client_id: u64,
+    pub username: String,
+    // Store color as RGB [r, g, b]
+    pub color: [f32; 3],
 }
 
 #[derive(Component, Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -56,6 +60,11 @@ pub struct CarInput {
     pub backward: bool,
     pub left: bool,
     pub right: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Default, Reflect)]
+pub struct JoinRequest {
+    pub username: String,
 }
 
 // Channel for sending car inputs
